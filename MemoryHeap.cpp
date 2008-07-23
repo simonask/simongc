@@ -44,7 +44,7 @@ bool MemoryHeap::walkObjects(ObjectHeader** _header, void** _object)
 	if (*header < data)	// *header is probably NULL, and we're initializing
 	{
 		*header = data;
-		*object = &data[sizeof(**_header)];		// Note that sizeof(**_header) == sizeof(ObjectHeader)
+		*object = &data[sizeof(**_header)];
 		return true;
 	}
 	
@@ -55,12 +55,16 @@ bool MemoryHeap::walkObjects(ObjectHeader** _header, void** _object)
 		// Advance!
 		*header += sizeof(**_header) + (*_header)->size + (*_header)->padding;
 		*object = *header + sizeof(**_header);
+		return true;
+		/*
+			TODO: Add flag matching?
 		
-		if (!(*_header)->flags & OBJECT_UNREACHABLE)	// Skip objects marked as unreachable
+		if (!(*_header)->flags & OBJECT_UNREACHABLE)
 			return true;
+		*/
 	}
 	
-	// No more objects to walk.
+	// No more objects to walk. :(
 	*header = NULL;
 	*object = NULL;
 	return false;
