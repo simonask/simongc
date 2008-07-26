@@ -8,7 +8,7 @@ struct my_obj
 	char meh;
 };
 
-int main (int argc, char const *argv[])
+int main(int argc, char const *argv[])
 {
 	simon_gc_init(65535);
 	

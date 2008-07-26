@@ -60,11 +60,17 @@ int main (int argc, char const *argv[])
 	
 	ExecutionEngine* engine = ExecutionEngine::create(mod);
 		
-	Function* mod_main = cast<Function>(mod->getFunction("main"));
-	int (*fp)(int, char const**) = (int (*)(int, char const**))engine->getPointerToFunction(mod_main);
+	Function* mod_main = mod->getFunction("main");
+	if (mod_main)
+	{
+		int (*fp)(int, char const**) = (int (*)(int, char const**))engine->getPointerToFunction(mod_main);
+		fp(argc, argv);
+	}
+	else
+	{
+		fprintf(stderr, "ERROR! Module '%s' does not define symbol 'main'!\n", filename);
+		exit(1);
+	}
 	
-	fp(argc, argv);
-	
-	delete mod;
 	return 0;
 }
