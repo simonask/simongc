@@ -105,12 +105,15 @@ void gc_collect()
 void gc_mark(MemoryHeap* heap)
 {
 	StackFrame* head = (StackFrame*)pthread_getspecific(stack_frame_head_key);
-	StackFrame* frame = head;
 	
 	ObjectHeader* header = NULL;
 	void* data = NULL;
 	while (memory_heap_walk(heap, &header, &data))
 	{
+		if (header->flags & OBJECT_UNREACHABLE)	// Marked by a previous iteration, or manually by the user.
+			continue;
+		
+		StackFrame* frame = head;
 		bool reachable = false;
 		while (frame)
 		{
@@ -122,7 +125,6 @@ void gc_mark(MemoryHeap* heap)
 			}
 			frame = frame->parent;
 		}
-		frame = head;
 		
 		// TODO: Look for pointers in data
 		
@@ -135,5 +137,17 @@ void gc_mark(MemoryHeap* heap)
 
 void gc_sweep(MemoryHeap* heap)
 {
-	memory_heap_compact(heap);
+	ObjectHeader* header = NULL;
+	void* data = NULL;
+	while (memory_heap_walk(heap, &header, &data))
+	{
+		if (header->flags & OBJECT_UNREACHABLE && !(header->flags & OBJECT_FINALIZED))
+		{
+			if (header->finalizer)
+				header->finalizer(data);
+		}
+	}
+	
+	memory_heap_compact(heap); // TODO: Keep list of moved objects
+	// TODO: Update roots with new pointers
 }
