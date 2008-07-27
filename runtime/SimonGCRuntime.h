@@ -17,8 +17,10 @@ typedef enum ObjectFlags
 	OBJECT_FINALIZED   = 1 << 2
 } ObjectFlags;
 
-#define ALIGNMENT 16
-#define REQUIRED_PADDING(min, alignment) ((alignment) - ((min) % (alignment)))
+#define ALIGNMENT 0x10
+#define KINDA_LOOKS_LIKE_A_POINTER(maybe_ptr) (maybe_ptr & ALIGNMENT == 0)
+
+#define REQUIRED_PADDING(min) (ALIGNMENT - ((min) % ALIGNMENT))
 
 typedef struct ObjectHeader
 {
@@ -39,9 +41,21 @@ typedef struct ObjectHeader
 			The amount of padding in the allocated memory block.
 			Note the irony: This field doubles as actual padding for the
 			ObjectHeader struct. 
-		 */
+		*/
 		unsigned int padding : 8;
-		unsigned char reserved[REQUIRED_PADDING(sizeof(size_t) + sizeof(ObjectFinalizer) + 4, ALIGNMENT)];	/* pad up to ALIGNMENT */
+		
+		/*
+			The remaining amount of required padding.
+			Note the "+5": This is
+			
+			  sizeof(generation) + sizeof(flags) + sizeof(padding)
+			
+			The reason this field is in a union with 'padding' is that
+			the array must be at least 1 byte long, so if sizeof all the
+			other members is == 0 mod ALIGNMENT, the required padding will
+			still be >= 1.
+		*/
+		unsigned char reserved[REQUIRED_PADDING(sizeof(size_t) + sizeof(ObjectFinalizer) + 5)];
 	};
 
 } ObjectHeader;
