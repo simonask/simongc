@@ -2,6 +2,7 @@
 #include "SimonGCMemoryHeap.h"
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 static MemoryHeap* young = NULL;
 static MemoryHeap* elderly = NULL;
@@ -10,10 +11,17 @@ static pthread_mutex_t gc_mutex;
 static pthread_key_t stack_frame_head_key;
 
 static void gc_collect();
+static void gc_mark(MemoryHeap* heap);
+static void gc_sweep(MemoryHeap* heap);
 static inline void gc_lock() { pthread_mutex_lock(&gc_mutex); }
 static inline void gc_unlock() { pthread_mutex_unlock(&gc_mutex); }
 static inline bool gc_trylock() { return pthread_mutex_trylock(&gc_mutex); }
 
+typedef struct StackFrame {
+	struct StackFrame* parent;
+	size_t num_roots;
+	void** roots[];
+} StackFrame;
 
 void simon_gc_initialize(size_t initial_heap_size)
 {
@@ -39,11 +47,6 @@ void* simon_gc_malloc(size_t n)
 	return ptr;
 }
 
-void gc_collect()
-{
-	// TODO: Do it!
-}
-
 void simon_gc_collect()
 {
 	gc_lock();
@@ -57,10 +60,15 @@ void simon_gc_yield()
 	gc_unlock();
 }
 
-StackFrame* simon_gc_roots(size_t count, ...)
+void simon_gc_stack_push(size_t count, ...)
 {
 	StackFrame* frame = (StackFrame*)malloc(sizeof(StackFrame) + sizeof(void*) * count);
-	frame->parent = NULL; // TODO: Current thread-local head
+
+	StackFrame* current_head = (StackFrame*)pthread_getspecific(stack_frame_head_key);
+	frame->parent = current_head;
+	frame->num_roots = count;
+	
+	pthread_setspecific(stack_frame_head_key, frame);
 	
 	va_list varg;
 	va_start(varg, count);
@@ -70,13 +78,62 @@ StackFrame* simon_gc_roots(size_t count, ...)
 		frame->roots[i] = va_arg(varg, void**);
 	}
 	va_end(varg);
-	
-	// TODO: Append to linked list.
-	return frame;
 }
 
-void simon_gc_cleanup_roots(StackFrame* frame)
+void simon_gc_stack_pop()
 {
-	// TODO: Run through linked list and check if anything points here, and if it does, point it to this one's parent instead-
-	free(frame);
+	StackFrame* current_head = (StackFrame*)pthread_getspecific(stack_frame_head_key);
+	if (current_head)
+	{
+		pthread_setspecific(stack_frame_head_key, current_head->parent);
+	}
+	
+	free(current_head);
+}
+
+bool simon_gc_walk_objects(ObjectHeader** header, void** data)
+{
+	return memory_heap_walk(young, header, data);
+}
+
+void gc_collect()
+{
+	gc_mark(young);
+	gc_sweep(young);
+}
+
+void gc_mark(MemoryHeap* heap)
+{
+	StackFrame* head = (StackFrame*)pthread_getspecific(stack_frame_head_key);
+	StackFrame* frame = head;
+	
+	ObjectHeader* header = NULL;
+	void* data = NULL;
+	while (memory_heap_walk(heap, &header, &data))
+	{
+		bool reachable = false;
+		while (frame)
+		{
+			signed int i;	// size_t is unsigned, so reverse looping is risky business.
+			for (i = head->num_roots - 1; i >= 0; --i)
+			{
+				if (*head->roots[i] == data)
+					reachable = true;
+			}
+			frame = frame->parent;
+		}
+		frame = head;
+		
+		// TODO: Look for pointers in data
+		
+		if (!reachable)
+			header->flags |= OBJECT_UNREACHABLE;
+		else
+			++header->generation;
+	}
+}
+
+void gc_sweep(MemoryHeap* heap)
+{
+	memory_heap_compact(heap);
 }

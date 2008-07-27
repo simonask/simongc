@@ -46,21 +46,18 @@ typedef struct ObjectHeader
 
 } ObjectHeader;
 
-typedef struct StackFrame {
-	struct StackFrame* parent;
-	size_t num_roots;
-	void** roots[];
-} StackFrame;
-
 void simon_gc_initialize(size_t initial_heap_size);
 void simon_gc_register_thread();
 void* simon_gc_malloc(size_t n);
 void simon_gc_collect();
 void simon_gc_yield();
 
+bool simon_gc_walk_objects(ObjectHeader**, void** data);
+
 /*
-	simon_gc_roots and simon_gc_cleanup_roots are for gluing the garbage
+	simon_gc_stack_push/pop are for gluing the garbage
 	collector onto C code.
+	
 	This is an accurate GC, so unfortunately it needs one of the following:
 		a) Compiler support
 		b) Explicit root annotation.
@@ -68,15 +65,15 @@ void simon_gc_yield();
 	Since I'm too lazy to actually modify the C compiler, option b is what
 	you get in C. :)
 	
-	Note that things WILL break if you forget a call to simon_gc_cleanup_roots!
+	Note that things WILL break if you forget a call to simon_gc_stack_pop!
 	This means calling it before EVERY exit point in your function, guys!
 	
 	Real language implementations will emulate the StackFrame data structure
 	on their own stack, and maintain the linked list of stacks using some
 	functions I haven't written yet.
  */
-StackFrame* simon_gc_roots(size_t count, ...); 
-void simon_gc_cleanup_roots(StackFrame* frame);
+void simon_gc_stack_push(size_t count, ...); 
+void simon_gc_stack_pop();
 
 #ifdef __cplusplus__
 }
