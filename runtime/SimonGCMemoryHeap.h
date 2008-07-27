@@ -8,7 +8,7 @@ extern "C" {
 #include "SimonGCRuntime.h"
 
 typedef struct MemoryHeap {
-	char* data;
+	void* data;
 	size_t size;
 	size_t offset;
 } MemoryHeap;
