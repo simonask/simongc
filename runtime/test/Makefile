@@ -1,3 +1,3 @@
 all:
-	gcc -I.. ../*.c test.c -o test
+	gcc -g -I.. ../*.c test.c -o test
 	./test
