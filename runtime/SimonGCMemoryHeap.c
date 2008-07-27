@@ -30,11 +30,12 @@ void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 {
 	unsigned char padding = REQUIRED_PADDING(n, ALIGNMENT);
 	size_t required_size = sizeof(ObjectHeader) + n + padding;
+	
 	if (required_size > memory_heap_available(heap))
-		return NULL;	// TODO: try compacting, see if it helps
+		return NULL;	// TODO: try compacting, see if it helps -- if not, the allocator should decide if the appropriate course of action is to enlarge this heap, or move existing objects to a different heap, and then compacting.
 	
 	ObjectHeader* header = (ObjectHeader*)(&heap->data[heap->offset]);
-	char* obj = (void*)&header[sizeof(ObjectHeader)];
+	void* obj = (void*)(&heap->data[heap->offset] + sizeof(*header));
 	memset(obj, 0, n + padding);
 	header->size = n;
 	header->generation = 0;
@@ -55,22 +56,20 @@ void memory_heap_enlarge(MemoryHeap* heap, size_t new_size)
 	
 }
 
-bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** _object)
+bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
 {
-	char** object = (char**)_object;
-	
 	if (heap->offset == 0)
 		return false;	// We didn't allocate anything yet, so just bail out.
 	
-	if ((void*)*header < (void*)heap->data)	// *header is probably NULL, and we're initializing
+	if (!*header)	// *header is NULL, so we're initializing
 	{
-		*header = (ObjectHeader*)heap->data;
-		*object = &heap->data[sizeof(**header)];
+		*header = (ObjectHeader*)&heap->data[0];
+		*object = (void*)(heap->data + sizeof(**header));
 		return true;
 	}
 	
 	*object = (char*)(*header + sizeof(**header));
-	char* upper_bound = &heap->data[heap->offset];
+	void* upper_bound = (void*)(heap->data + heap->offset);
 	while (*object + (*header)->size + (*header)->padding < upper_bound)
 	{
 		// Advance!
