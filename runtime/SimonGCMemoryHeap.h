@@ -2,6 +2,7 @@
 #define SIMON_MEMORY_HEAP
 
 #include "SimonGCRuntime.h"
+#include <pthread.h>
 
 #ifdef __cplusplus__
 namespace SimonGC {}
@@ -14,9 +15,11 @@ typedef struct MemoryHeap {
 	void* data;
 	size_t size;
 	size_t offset;
+	ObjectMovedCallback object_moved;
+	pthread_rwlock_t lock;
 } MemoryHeap;
 
-MemoryHeap* memory_heap_create(size_t initial_heap_size);
+MemoryHeap* memory_heap_create(size_t initial_heap_size, ObjectMovedCallback callback);
 void memory_heap_destroy(MemoryHeap*);
 void* memory_heap_allocate(MemoryHeap*, size_t n);
 void memory_heap_compact(MemoryHeap*);

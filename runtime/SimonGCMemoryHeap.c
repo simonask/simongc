@@ -21,14 +21,25 @@
 */
 #define PTR_OFFSET(ptr, offset) ((void*)(ptr) + offset)
 
+/*
+	Here, 'width' means allocated size + padding.
+*/
 #define OBJECT_DATA_WIDTH(obj) ((obj)->meta.size + (obj)->meta.padding)
 #define OBJECT_WIDTH(obj) (sizeof(ObjectMeta) + OBJECT_DATA_WIDTH(obj))
 
-MemoryHeap* memory_heap_create(size_t initial_heap_size)
+#define WRLOCK(heap) pthread_rwlock_wrlock(&(heap)->lock)
+#define RDLOCK(heap) pthread_rwlock_rdlock(&(heap)->lock)
+#define UNLOCK(heap) pthread_rwlock_unlock(&(heap)->lock)
+
+
+MemoryHeap* memory_heap_create(size_t initial_heap_size, ObjectMovedCallback callback)
 {
 	MemoryHeap* heap = (MemoryHeap*)malloc(sizeof(MemoryHeap));
 	heap->size = initial_heap_size ? initial_heap_size : (1 << 20);	// Default to 1M
 	heap->offset = 0;
+	heap->object_moved = callback;
+	pthread_rwlock_init(&heap->lock, NULL);
+	
 	heap->data = malloc(heap->size);
 	if (!heap->data)
 	{
@@ -36,6 +47,7 @@ MemoryHeap* memory_heap_create(size_t initial_heap_size)
 		free(heap);
 		return NULL;
 	}
+	
 	printf("Allocated heap of size %d\n", heap->size);
 	return heap;
 }
@@ -43,17 +55,19 @@ MemoryHeap* memory_heap_create(size_t initial_heap_size)
 void memory_heap_destroy(MemoryHeap* heap)
 {
 	// TODO: Call finalizers?
+	pthread_rwlock_destroy(&heap->lock);
 	free(heap->data);
 	free(heap);
 }
 
 void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 {
+	WRLOCK(heap);
 	unsigned char padding = REQUIRED_PADDING(n);
 	size_t required_size = sizeof(ObjectMeta) + n + padding;
 	
 	if (required_size > memory_heap_available(heap))
-		return NULL;	// TODO: try compacting, see if it helps -- if not, the allocator should decide if the appropriate course of action is to enlarge this heap, or move existing objects to a different heap, and then compacting.
+		return NULL;
 		
 	Object* object = (Object*)PTR_OFFSET(heap->data, heap->offset);
 	memset(object->data, 0, n + padding);
@@ -64,12 +78,14 @@ void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 	printf("allocation: 0x%x\tdata: 0x%x\n", object, object->data);
 	
 	heap->offset += required_size;
+	UNLOCK(heap);
 	return (void*)object->data;
 }
 
 void memory_heap_compact(MemoryHeap* heap)
 {
-	
+	WRLOCK(heap);
+	UNLOCK(heap);
 }
 
 void memory_heap_enlarge(MemoryHeap* heap, size_t new_size)
@@ -77,8 +93,11 @@ void memory_heap_enlarge(MemoryHeap* heap, size_t new_size)
 	
 }
 
+/*
+	TODO: Reimplement to use a callback so we can read-lock the heap.
+*/
 bool memory_heap_walk(MemoryHeap* heap, Object** object)
-{	
+{
 	/*
 		Case 0: The never-going-to-happen.
 		We did not allocate anything in this heap yet.
@@ -128,7 +147,7 @@ ObjectMeta* memory_heap_get_meta(MemoryHeap* heap, void* object)
 {
 	if (!memory_heap_contains(heap, object))
 		return NULL;
-		
+	
 	ObjectMeta* meta = PTR_OFFSET(object, -sizeof(ObjectMeta));
 
 	assert(memory_heap_contains(heap, (void*)meta) && "Requested metadata outside of the heap! Are you sure object points to the beginning of some object data in this heap?");
