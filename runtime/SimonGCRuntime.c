@@ -13,6 +13,7 @@ static pthread_key_t stack_frame_head_key;
 static void gc_collect();
 static void gc_mark(MemoryHeap* heap);
 static void gc_sweep(MemoryHeap* heap);
+static void gc_object_moved(void* from, void* to);
 static inline void gc_lock() { pthread_mutex_lock(&gc_mutex); }
 static inline void gc_unlock() { pthread_mutex_unlock(&gc_mutex); }
 static inline bool gc_trylock() { return pthread_mutex_trylock(&gc_mutex); }
@@ -25,7 +26,7 @@ typedef struct StackFrame {
 
 void simon_gc_initialize(size_t initial_heap_size)
 {
-	young = memory_heap_create(initial_heap_size);
+	young = memory_heap_create(initial_heap_size, gc_object_moved);
 	
 	pthread_mutex_init(&gc_mutex, NULL);
 	pthread_key_create(&stack_frame_head_key, NULL);
@@ -155,4 +156,9 @@ void gc_sweep(MemoryHeap* heap)
 	
 	memory_heap_compact(heap); // TODO: Keep list of moved objects
 	// TODO: Update roots with new pointers
+}
+
+void gc_object_moved(void* from, void* to)
+{
+	printf("Object moved from 0x%x to 0x%x\n", from, to);
 }
