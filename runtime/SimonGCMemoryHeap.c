@@ -22,11 +22,12 @@
 #define PTR_OFFSET(ptr, offset) ((void*)(ptr) + offset)
 
 /*
-	Here, 'width' means allocated size + padding.
+	Width means allocated size + padding.
 */
 #define OBJECT_DATA_WIDTH(obj) ((obj)->meta.size + (obj)->meta.padding)
 #define OBJECT_WIDTH(obj) (sizeof(ObjectMeta) + OBJECT_DATA_WIDTH(obj))
 
+/* I'm such a lazy slob */
 #define WRLOCK(heap) pthread_rwlock_wrlock(&(heap)->lock)
 #define RDLOCK(heap) pthread_rwlock_rdlock(&(heap)->lock)
 #define UNLOCK(heap) pthread_rwlock_unlock(&(heap)->lock)
@@ -62,12 +63,14 @@ void memory_heap_destroy(MemoryHeap* heap)
 
 void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 {
+	void* ret = NULL;
 	WRLOCK(heap);
+	
 	unsigned char padding = REQUIRED_PADDING(n);
 	size_t required_size = sizeof(ObjectMeta) + n + padding;
 	
 	if (required_size > memory_heap_available(heap))
-		return NULL;
+		goto out; /* Let the caller decide what to do. */
 		
 	Object* object = (Object*)PTR_OFFSET(heap->data, heap->offset);
 	memset(object->data, 0, n + padding);
@@ -75,22 +78,27 @@ void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 	object->meta.generation = 0;
 	object->meta.flags = OBJECT_NO_FLAGS;
 	object->meta.padding = padding;
-	printf("allocation: 0x%x\tdata: 0x%x\n", object, object->data);
 	
 	heap->offset += required_size;
+	ret = (void*)object->data;
+	
+	out:
 	UNLOCK(heap);
-	return (void*)object->data;
+	return ret;
 }
 
 void memory_heap_compact(MemoryHeap* heap)
 {
 	WRLOCK(heap);
+	// TODO: Stuff...
 	UNLOCK(heap);
 }
 
 void memory_heap_enlarge(MemoryHeap* heap, size_t new_size)
 {
-	
+	WRLOCK(heap);
+	// TODO: Stuff...
+	UNLOCK(heap);
 }
 
 /*
