@@ -1,20 +1,20 @@
 #ifndef SIMON_MEMORY_HEAP
 #define SIMON_MEMORY_HEAP
 
+#include "SimonGCRuntime.h"
+
 #ifdef __cplusplus__
 namespace SimonGC {}
 extern "C" {
 #endif
 
-#include "SimonGCRuntime.h"
+typedef void(*ObjectMovedCallback)(void* from, void* to);
 
 typedef struct MemoryHeap {
 	void* data;
 	size_t size;
 	size_t offset;
 } MemoryHeap;
-
-typedef void(*ObjectMovedCallback)(void* from, void* to);
 
 MemoryHeap* memory_heap_create(size_t initial_heap_size);
 void memory_heap_destroy(MemoryHeap*);
