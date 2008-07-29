@@ -123,10 +123,11 @@ bool memory_heap_walk(MemoryHeap* heap, Object** object)
 		advance does not exceed the bounds of allocated space.
 	*/
 	void* upper_bound = PTR_OFFSET(heap->data, heap->offset);
-	if (PTR_OFFSET(*object, OBJECT_WIDTH(*object)) < upper_bound)
+	void* candidate = PTR_OFFSET(*object, OBJECT_WIDTH(*object));
+	if (candidate < upper_bound)
 	{
 		// Advance!
-		*object = (Object*)PTR_OFFSET(*object, OBJECT_WIDTH(*object));
+		*object = candidate;
 		return true;
 	}
 	
