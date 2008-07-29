@@ -11,6 +11,7 @@ void finalizer(void* data)
 int main (int argc, char const *argv[])
 {
 	simon_gc_initialize(1024 * 8);
+	printf("sizeof(Object): %d\n", sizeof(Object));
 	
 	char* lol = (char*)simon_gc_malloc(1024);
 	assert(lol && "Out of memory, or error in simon_gc_malloc :(");
@@ -21,6 +22,7 @@ int main (int argc, char const *argv[])
 	{
 		lol[i] = 'a' + (i % ('z' - 'a'));
 	}
+	printf("YAY: %s\n", lol);
 	
 	char* buffer = (char*)simon_gc_malloc(1024);
 	while (buffer)
@@ -30,22 +32,21 @@ int main (int argc, char const *argv[])
 		simon_gc_stack_pop();
 	}
 	
-	ObjectHeader* header = NULL;
-	void* data;
-	while (simon_gc_walk_objects(&header, &data))
+	Object* object = NULL;
+	while (simon_gc_walk_objects(&object))
 	{
-		printf("Object at 0x%x (size: %d, header: 0x%x)\n", data, header->size, header);
+		printf("Object at 0x%x (size: %d, header: 0x%x)\n", object->data, object->meta.size, object);
 	}
 	
 	simon_gc_collect();
 	simon_gc_stack_pop();
 	simon_gc_collect();
-	header = NULL;
-	while (simon_gc_walk_objects(&header, &data))
+	object = NULL;
+	while (simon_gc_walk_objects(&object))
 	{
 		// Should be none.
-		if (header->flags & OBJECT_UNREACHABLE)
-			printf("Object at 0x%x (size: %d) is unreachable!\n", data, header->size);
+		if (object->meta.flags & OBJECT_UNREACHABLE)
+			printf("Object at 0x%x (size: %d) is unreachable!\n", object->data, object->meta.size);
 	}
 	
 	return 0;

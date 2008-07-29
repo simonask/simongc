@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 /*
 	This is a convenience macro, needed because simply adding pointers
@@ -19,6 +20,9 @@
 	of void* casts. 
 */
 #define PTR_OFFSET(ptr, offset) ((void*)(ptr) + offset)
+
+#define OBJECT_DATA_WIDTH(obj) ((obj)->meta.size + (obj)->meta.padding)
+#define OBJECT_WIDTH(obj) (sizeof(ObjectMeta) + OBJECT_DATA_WIDTH(obj))
 
 MemoryHeap* memory_heap_create(size_t initial_heap_size)
 {
@@ -46,22 +50,21 @@ void memory_heap_destroy(MemoryHeap* heap)
 void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 {
 	unsigned char padding = REQUIRED_PADDING(n);
-	size_t required_size = sizeof(ObjectHeader) + n + padding;
+	size_t required_size = sizeof(ObjectMeta) + n + padding;
 	
 	if (required_size > memory_heap_available(heap))
 		return NULL;	// TODO: try compacting, see if it helps -- if not, the allocator should decide if the appropriate course of action is to enlarge this heap, or move existing objects to a different heap, and then compacting.
-	
-	ObjectHeader* header = (ObjectHeader*)PTR_OFFSET(heap->data, heap->offset);
-	void* obj = PTR_OFFSET(heap->data, heap->offset + sizeof(*header));
-	memset(obj, 0, n + padding);
-	header->size = n;
-	header->generation = 0;
-	header->flags = 0;
-	header->padding = padding;
-	printf("allocation: header: 0x%x\tdata: 0x%x\n", header, obj);
+		
+	Object* object = (Object*)PTR_OFFSET(heap->data, heap->offset);
+	memset(object->data, 0, n + padding);
+	object->meta.size = n;
+	object->meta.generation = 0;
+	object->meta.flags = OBJECT_NO_FLAGS;
+	object->meta.padding = padding;
+	printf("allocation: 0x%x\tdata: 0x%x\n", object, object->data);
 	
 	heap->offset += required_size;
-	return (void*)obj;
+	return (void*)object->data;
 }
 
 void memory_heap_compact(MemoryHeap* heap)
@@ -74,7 +77,7 @@ void memory_heap_enlarge(MemoryHeap* heap, size_t new_size)
 	
 }
 
-bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
+bool memory_heap_walk(MemoryHeap* heap, Object** object)
 {	
 	/*
 		Case 0: The never-going-to-happen.
@@ -85,13 +88,12 @@ bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
 	
 	/*
 		Case 1: The first
-		*header is NULL, so this is the first iteration. The first object's
-		header is the very first thing that'll turn up on the stack.
+		*object is NULL, so this is the first iteration. The first object's
+		metadata is the very first thing that'll turn up on the stack.
 	*/
-	if (!*header)	// *header is NULL, so we're initializing
+	if (!*object)
 	{
-		*header = (ObjectHeader*)PTR_OFFSET(heap->data, 0);
-		*object = PTR_OFFSET(heap->data, sizeof(**header));
+		*object = (Object*)PTR_OFFSET(heap->data, 0);
 		return true;
 	}
 	
@@ -101,18 +103,16 @@ bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
 		and use it's information to advance through the heap, if such an
 		advance does not exceed the bounds of allocated space.
 	*/
-	*object = PTR_OFFSET(*header, sizeof(**header));
 	void* upper_bound = PTR_OFFSET(heap->data, heap->offset);
-	while (PTR_OFFSET(*object, (*header)->size + (*header)->padding) < upper_bound)
+	while (PTR_OFFSET(*object, OBJECT_WIDTH(*object)) < upper_bound)
 	{
 		// Advance!
-		*header = (ObjectHeader*)PTR_OFFSET(*header, sizeof(**header) + (*header)->size + (*header)->padding);
-		*object = PTR_OFFSET(*header, sizeof(**header));
+		*object = (Object*)PTR_OFFSET(*object, OBJECT_WIDTH(*object));
 		return true;
 		/*
 			TODO: Add flag matching?
 		
-		if (!(*_header)->flags & OBJECT_UNREACHABLE)
+		if (!(*object)->meta.flags & OBJECT_UNREACHABLE)
 			return true;
 		*/
 	}
@@ -121,7 +121,6 @@ bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
 		Case 3: The boring.
 		None of the conditions were matched, so we're probably at the end.
 	*/
-	*header = NULL;
 	*object = NULL;
 	return false;
 }
@@ -129,4 +128,16 @@ bool memory_heap_walk(MemoryHeap* heap, ObjectHeader** header, void** object)
 bool memory_heap_contains(MemoryHeap* heap, void* object)
 {
 	return (object > heap->data && object < PTR_OFFSET(heap->data, heap->offset));
+}
+
+ObjectMeta* memory_heap_get_meta(MemoryHeap* heap, void* object)
+{
+	if (!memory_heap_contains(heap, object))
+		return NULL;
+		
+	ObjectMeta* meta = PTR_OFFSET(object, -sizeof(ObjectMeta));
+
+	assert(memory_heap_contains(heap, (void*)meta) && "Requested metadata outside of the heap! Are you sure object points to the beginning of some object data in this heap?");
+	
+	return meta;
 }

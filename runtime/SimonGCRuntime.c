@@ -35,14 +35,21 @@ void simon_gc_initialize(size_t initial_heap_size)
 
 void simon_gc_register_thread()
 {
-	// set thread-local root head
+	// TODO: Update global list of stackframe lists
+	pthread_setspecific(stack_frame_head_key, NULL);
 }
 
 void* simon_gc_malloc(size_t n)
 {
 	gc_lock();
-	// TODO: Maybe call gc_collect
+	
 	void* ptr = memory_heap_allocate(young, n);
+	if (!ptr)
+	{
+		gc_collect();
+		ptr = memory_heap_allocate(young, n);
+	}
+	
 	gc_unlock();
 	return ptr;
 }
@@ -91,9 +98,9 @@ void simon_gc_stack_pop()
 	free(current_head);
 }
 
-bool simon_gc_walk_objects(ObjectHeader** header, void** data)
+bool simon_gc_walk_objects(Object** object)
 {
-	return memory_heap_walk(young, header, data);
+	return memory_heap_walk(young, object);
 }
 
 void gc_collect()
@@ -106,11 +113,10 @@ void gc_mark(MemoryHeap* heap)
 {
 	StackFrame* head = (StackFrame*)pthread_getspecific(stack_frame_head_key);
 	
-	ObjectHeader* header = NULL;
-	void* data = NULL;
-	while (memory_heap_walk(heap, &header, &data))
+	Object* object = NULL;
+	while (memory_heap_walk(heap, &object))
 	{
-		if (header->flags & OBJECT_UNREACHABLE)	// Marked by a previous iteration, or manually by the user.
+		if (object->meta.flags & OBJECT_UNREACHABLE)	// Marked by a previous iteration, or manually by the user.
 			continue;
 		
 		StackFrame* frame = head;
@@ -120,7 +126,7 @@ void gc_mark(MemoryHeap* heap)
 			signed int i;	// size_t is unsigned, so reverse looping is risky business.
 			for (i = head->num_roots - 1; i >= 0; --i)
 			{
-				if (*head->roots[i] == data)
+				if (*head->roots[i] == object->data)
 					reachable = true;
 			}
 			frame = frame->parent;
@@ -129,22 +135,21 @@ void gc_mark(MemoryHeap* heap)
 		// TODO: Look for pointers in data
 		
 		if (!reachable)
-			header->flags |= OBJECT_UNREACHABLE;
+			object->meta.flags |= OBJECT_UNREACHABLE;
 		else
-			++header->generation;
+			++(object->meta.generation);
 	}
 }
 
 void gc_sweep(MemoryHeap* heap)
 {
-	ObjectHeader* header = NULL;
-	void* data = NULL;
-	while (memory_heap_walk(heap, &header, &data))
+	Object* object = NULL;
+	while (memory_heap_walk(heap, &object))
 	{
-		if (header->flags & OBJECT_UNREACHABLE && !(header->flags & OBJECT_FINALIZED))
+		if (object->meta.flags & OBJECT_UNREACHABLE && !(object->meta.flags & OBJECT_FINALIZED))
 		{
-			if (header->finalizer)
-				header->finalizer(data);
+			if (object->meta.finalizer)
+				object->meta.finalizer(object->data);
 		}
 	}
 	

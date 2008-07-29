@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #ifdef __cplusplus__
+namespace SimonGC {
 extern "C" {
 #endif
 
@@ -12,23 +13,23 @@ typedef void(*ObjectFinalizer)(void* obj);
 
 typedef enum ObjectFlags
 {
+	OBJECT_NO_FLAGS    = 0,
 	OBJECT_UNREACHABLE = 1,
 	OBJECT_ATOMIC      = 1 << 1,
 	OBJECT_FINALIZED   = 1 << 2
 } ObjectFlags;
 
 #define ALIGNMENT 0x10
+#define REQUIRED_PADDING(min) (ALIGNMENT - ((min) % ALIGNMENT))
 #define KINDA_LOOKS_LIKE_A_POINTER(maybe_ptr) (maybe_ptr & ALIGNMENT == 0)
 
-#define REQUIRED_PADDING(min) (ALIGNMENT - ((min) % ALIGNMENT))
-
-typedef struct ObjectHeader
+typedef struct ObjectMeta
 {
 	size_t size;
 	ObjectFinalizer finalizer;
 	unsigned int generation : 16;	/* How many GC passes has the object survived? */
 	unsigned int flags : 16;
-	
+
 	/*
 		The reason for the following hullaballooza is that we want our allocated
 		objects to be aligned at 16 bytes. This is because it can give
@@ -39,17 +40,16 @@ typedef struct ObjectHeader
 	{
 		/*
 			The amount of padding in the allocated memory block.
-			Note the irony: This field doubles as actual padding for the
-			ObjectHeader struct. 
+			Note the irony: This field doubles as actual padding for this struct.
 		*/
 		unsigned int padding : 8;
-		
+
 		/*
 			The remaining amount of required padding.
-			Note the "+5": This is
-			
+			Note that "+5" is
+
 			  sizeof(generation) + sizeof(flags) + sizeof(padding)
-			
+
 			The reason this field is in a union with 'padding' is that
 			the array must be at least 1 byte long, so if sizeof all the
 			other members is == 0 mod ALIGNMENT, the required padding will
@@ -57,8 +57,12 @@ typedef struct ObjectHeader
 		*/
 		unsigned char reserved[REQUIRED_PADDING(sizeof(size_t) + sizeof(ObjectFinalizer) + 5)];
 	};
+} ObjectMeta;
 
-} ObjectHeader;
+typedef struct Object {
+	struct ObjectMeta meta;
+	unsigned char data[];
+} Object;
 
 void simon_gc_initialize(size_t initial_heap_size);
 void simon_gc_register_thread();
@@ -66,7 +70,7 @@ void* simon_gc_malloc(size_t n);
 void simon_gc_collect();
 void simon_gc_yield();
 
-bool simon_gc_walk_objects(ObjectHeader**, void** data);
+bool simon_gc_walk_objects(Object**);
 
 /*
 	simon_gc_stack_push/pop are for gluing the garbage
@@ -90,6 +94,7 @@ void simon_gc_stack_push(size_t count, ...);
 void simon_gc_stack_pop();
 
 #ifdef __cplusplus__
+}
 }
 #endif
 
