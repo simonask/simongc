@@ -1,0 +1,20 @@
+SimonGC is a generational garbage collector designed for LLVM.
+
+The runtime is written in pure C, so apart from the compiler-specific bindings,
+the garbage collector can be used by any system.
+
+Build Instructions
+------------------
+
+Get a copy of the LLVM source from llvm.org. Unpack where you'd like.
+
+You probably have to build LLVM before you can build SimonGC. Follow the
+LLVM build instructions, which are pretty straight-forward.
+
+Put SimonGC in llvm/lib/SimonGC, and run make within. All done!
+
+Run tests in SimonGC/runtime/test.
+
+
+
+Have fun!
