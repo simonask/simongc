@@ -138,7 +138,10 @@ void gc_mark(MemoryHeap* heap)
 		if (!reachable)
 			object->meta.flags |= OBJECT_UNREACHABLE;
 		else
+		{
+			object->meta.flags &= ~OBJECT_UNREACHABLE; /* For objects that have been re-referenced */
 			++(object->meta.generation);
+		}
 	}
 }
 
