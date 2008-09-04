@@ -48,6 +48,7 @@ int main (int argc, char const *argv[])
 		if (object->meta.flags & OBJECT_UNREACHABLE)
 			printf("Object at 0x%x (size: %d) is unreachable!\n", object->data, object->meta.size);
 	}
+	simon_gc_collect();
 	
 	return 0;
 }
