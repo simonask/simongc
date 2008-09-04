@@ -63,11 +63,12 @@ void memory_heap_destroy(MemoryHeap* heap)
 
 void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 {
-	void* ret = NULL;
 	WRLOCK(heap);
 	
 	unsigned char padding = REQUIRED_PADDING(n);
 	size_t required_size = sizeof(ObjectMeta) + n + padding;
+	
+	void* ret = NULL;
 	
 	if (required_size > memory_heap_available(heap))
 		goto out; /* Let the caller decide what to do. */
@@ -90,7 +91,37 @@ void* memory_heap_allocate(MemoryHeap* heap, size_t n)
 void memory_heap_compact(MemoryHeap* heap)
 {
 	WRLOCK(heap);
-	// TODO: Stuff...
+	void* upper_bound = PTR_OFFSET(heap->data, heap->offset);
+	void* candidate = PTR_OFFSET(heap->data, 0);
+	size_t new_offset = 0;
+	while (candidate < upper_bound)
+	{
+		Object* object = (Object*)candidate;
+		size_t width = OBJECT_WIDTH(object);
+		
+		if (!(object->meta.flags & OBJECT_UNREACHABLE))
+		{
+			if (PTR_OFFSET(heap->data, new_offset) != candidate)
+			{
+				Object* new_object = (Object*)PTR_OFFSET(heap->data, new_offset);
+				
+				register size_t i;
+				for (i = 0; i < width; ++i)
+				{
+					((unsigned char*)new_object)[i] = ((unsigned char*)object)[i];
+				}
+				
+				if (heap->object_moved)
+					heap->object_moved(object->data, new_object->data);
+			}
+			
+			new_offset += width;
+		}
+		
+		printf("adding %d to %x\n", width, candidate);
+		candidate = PTR_OFFSET(candidate, width);
+	}
+	heap->offset = new_offset;
 	UNLOCK(heap);
 }
 
